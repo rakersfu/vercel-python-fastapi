@@ -2,6 +2,7 @@
 
 import typing
 import os
+import json
 from fastapi import FastAPI, Header, APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -31,7 +32,7 @@ async def groq_api(args: ChatArgs, authorization: str = Header(None)):
         api_key=api_key
     )
 
-    # 🚀 使用流式生成
+    # 🚀 使用流式生成（包装成 OpenAI SSE 格式）
     async def event_generator():
         async with client.chat.completions.stream(
             model=args.model,
@@ -39,10 +40,16 @@ async def groq_api(args: ChatArgs, authorization: str = Header(None)):
         ) as stream:
             async for event in stream:
                 if event.type == "token":
-                    # 逐个 token 返回
-                    yield event.token
+                    data = {
+                        "id": "chatcmpl-stream",
+                        "object": "chat.completion.chunk",
+                        "choices": [
+                            {"delta": {"content": event.token}, "index": 0, "finish_reason": None}
+                        ]
+                    }
+                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
             # 结束标记
-            yield "[DONE]"
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
