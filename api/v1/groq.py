@@ -22,7 +22,7 @@ async def groq_api(args: ChatArgs, authorization: str = Header(None)):
         return {"error": "API key not provided"}
 
     client = AsyncOpenAI(
-        base_url="https://api.groq.com/openai/v1",
+        base_url="https://api.groq.com/openai",
         api_key=api_key
     )
 
@@ -32,9 +32,20 @@ async def groq_api(args: ChatArgs, authorization: str = Header(None)):
             messages=args.messages,
         ) as stream:
             async for event in stream:
-                # ⚠️ 直接转发全部事件
-                data = {"type": event.type, "data": event.dict()}
-                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                # 如果是 message_delta，就拆分输出
+                if event.type == "message_delta":
+                    content = event.delta.get("content", "")
+                    # 每 10 个字符切一段
+                    for i in range(0, len(content), 10):
+                        chunk = content[i:i+10]
+                        data = {
+                            "id": "chatcmpl-stream",
+                            "object": "chat.completion.chunk",
+                            "choices": [
+                                {"delta": {"content": chunk}, "index": 0, "finish_reason": None}
+                            ]
+                        }
+                        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
             yield "data: [DONE]\n\n"
 
