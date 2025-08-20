@@ -17,7 +17,7 @@ class ChatArgs(pydantic.BaseModel):
 @router.post("/chat/completions")
 async def groq_api(args: ChatArgs, authorization: str = Header(...)):
     api_key = authorization.split(" ")[1]
-    client = AsyncClient(base_url="https://api.groq.com/openai/v1",
+    client = AsyncClient(base_url="https://api.groq.com/openai",
                          api_key=api_key)
     return await client.chat.completions.create(
         model=args.model,
