@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 import typing
+import os
 from fastapi import FastAPI, Header, APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from openai import AsyncOpenAI
-import os
 
 app = FastAPI()
 router = APIRouter()
@@ -20,7 +21,6 @@ async def groq_api(args: ChatArgs, authorization: str = Header(None)):
     if authorization:
         api_key = authorization.split(" ")[1]
     else:
-        # 2️⃣ 如果 Header 没有，就尝试从环境变量取
         api_key = os.getenv("GROQ_API_KEY")
 
     if not api_key:
@@ -31,11 +31,20 @@ async def groq_api(args: ChatArgs, authorization: str = Header(None)):
         api_key=api_key
     )
 
-    response = await client.chat.completions.create(
-        model=args.model,
-        messages=args.messages,
-    )
-    return response
+    # 🚀 使用流式生成
+    async def event_generator():
+        async with client.chat.completions.stream(
+            model=args.model,
+            messages=args.messages,
+        ) as stream:
+            async for event in stream:
+                if event.type == "token":
+                    # 逐个 token 返回
+                    yield event.token
+            # 结束标记
+            yield "[DONE]"
 
-# ⚠️ 一定要 include_router，否则访问会报 Not Found
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+# 注册路由
 app.include_router(router, prefix="/v1")
